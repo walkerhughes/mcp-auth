@@ -1,0 +1,24 @@
+[project]
+name = "mcp-auth"
+version = "0.1.0"
+description = "A tiny multi-user SQLite MCP service authenticated by Stytch Connected Apps"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastmcp>=3.4.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+
+[project.scripts]
+mcp-auth = "mcp_auth.server:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

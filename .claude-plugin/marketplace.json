@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "mcp-auth-local",
+  "description": "Local marketplace for the authenticated SQLite MCP demo",
+  "owner": {
+    "name": "Walker Hughes"
+  },
+  "plugins": [
+    {
+      "name": "sqlite-notes",
+      "description": "Private SQLite notes through a Stytch-authenticated MCP service",
+      "source": "./plugin/sqlite-notes",
+      "category": "development"
+    }
+  ]
+}
