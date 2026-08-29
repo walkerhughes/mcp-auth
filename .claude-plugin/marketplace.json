@@ -1,14 +1,14 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "mcp-auth-local",
-  "description": "Local marketplace for the authenticated SQLite MCP demo",
+  "description": "Local marketplace for the Horizon Notes MCP demo",
   "owner": {
     "name": "Walker Hughes"
   },
   "plugins": [
     {
       "name": "sqlite-notes",
-      "description": "Private SQLite notes through a Stytch-authenticated MCP service",
+      "description": "Shared SQLite notes protected by Prefect Horizon",
       "source": "./plugin/sqlite-notes",
       "category": "development"
     }

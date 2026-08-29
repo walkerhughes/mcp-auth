@@ -12,42 +12,54 @@ class NotesDatabase:
     def initialize(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS notes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    owner_id TEXT NOT NULL,
-                    title TEXT NOT NULL,
-                    body TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS notes_owner_id_id ON notes(owner_id, id)"
-            )
+            columns = connection.execute("PRAGMA table_info(notes)").fetchall()
+            if any(column["name"] == "owner_id" for column in columns):
+                self._migrate_stytch_schema(connection)
+            self._create_schema(connection)
 
-    def create(self, owner_id: str, title: str, body: str = "") -> dict[str, Any]:
+    @staticmethod
+    def _create_schema(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                body TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    @classmethod
+    def _migrate_stytch_schema(cls, connection: sqlite3.Connection) -> None:
+        connection.execute("ALTER TABLE notes RENAME TO notes_stytch")
+        cls._create_schema(connection)
+        connection.execute(
+            """
+            INSERT INTO notes(id, title, body, created_at, updated_at)
+            SELECT id, title, body, created_at, updated_at FROM notes_stytch
+            """
+        )
+        connection.execute("DROP TABLE notes_stytch")
+
+    def create(self, title: str, body: str = "") -> dict[str, Any]:
         with self._connect() as connection:
             cursor = connection.execute(
-                "INSERT INTO notes(owner_id, title, body) VALUES (?, ?, ?)",
-                (owner_id, title, body),
+                "INSERT INTO notes(title, body) VALUES (?, ?)",
+                (title, body),
             )
-            return self.get(owner_id, cursor.lastrowid, connection=connection)
+            return self.get(cursor.lastrowid, connection=connection)
 
-    def list(self, owner_id: str) -> list[dict[str, Any]]:
+    def list(self) -> list[dict[str, Any]]:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT id, title, body, created_at, updated_at FROM notes "
-                "WHERE owner_id = ? ORDER BY id",
-                (owner_id,),
+                "SELECT id, title, body, created_at, updated_at FROM notes ORDER BY id"
             ).fetchall()
         return [dict(row) for row in rows]
 
     def get(
         self,
-        owner_id: str,
         note_id: int,
         *,
         connection: sqlite3.Connection | None = None,
@@ -56,9 +68,8 @@ class NotesDatabase:
         connection = connection or self._connect()
         try:
             row = connection.execute(
-                "SELECT id, title, body, created_at, updated_at FROM notes "
-                "WHERE owner_id = ? AND id = ?",
-                (owner_id, note_id),
+                "SELECT id, title, body, created_at, updated_at FROM notes WHERE id = ?",
+                (note_id,),
             ).fetchone()
         finally:
             if owns_connection:
@@ -69,7 +80,6 @@ class NotesDatabase:
 
     def update(
         self,
-        owner_id: str,
         note_id: int,
         title: str | None = None,
         body: str | None = None,
@@ -77,23 +87,25 @@ class NotesDatabase:
         if title is None and body is None:
             raise ValueError("Provide title, body, or both")
         with self._connect() as connection:
-            existing = self.get(owner_id, note_id, connection=connection)
+            existing = self.get(note_id, connection=connection)
             connection.execute(
                 "UPDATE notes SET title = ?, body = ?, updated_at = CURRENT_TIMESTAMP "
-                "WHERE owner_id = ? AND id = ?",
-                (title if title is not None else existing["title"],
-                 body if body is not None else existing["body"], owner_id, note_id),
+                "WHERE id = ?",
+                (
+                    title if title is not None else existing["title"],
+                    body if body is not None else existing["body"],
+                    note_id,
+                ),
             )
-            return self.get(owner_id, note_id, connection=connection)
+            return self.get(note_id, connection=connection)
 
-    def delete(self, owner_id: str, note_id: int) -> bool:
+    def delete(self, note_id: int) -> bool:
         with self._connect() as connection:
-            cursor = connection.execute(
-                "DELETE FROM notes WHERE owner_id = ? AND id = ?", (owner_id, note_id)
-            )
+            cursor = connection.execute("DELETE FROM notes WHERE id = ?", (note_id,))
         return cursor.rowcount == 1
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path)
+        connection = sqlite3.connect(self.path, timeout=30)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA journal_mode = WAL")
         return connection

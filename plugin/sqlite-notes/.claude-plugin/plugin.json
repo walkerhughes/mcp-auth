@@ -1,7 +1,7 @@
 {
   "name": "sqlite-notes",
   "version": "0.1.0",
-  "description": "Private SQLite notes through a Stytch-authenticated remote MCP service",
+  "description": "Shared SQLite notes protected by Prefect Horizon",
   "author": {
     "name": "Walker Hughes"
   }

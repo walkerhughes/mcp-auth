@@ -1,142 +1,80 @@
-# Stytch-authenticated SQLite MCP
+# Horizon Notes MCP
 
-A deliberately small remote MCP service for learning the shape of a SaaS integration:
+A small FastMCP notes server prepared for deployment on [Prefect Horizon](https://www.prefect.io/horizon/deploy).
 
-- FastMCP serves six tools over Streamable HTTP.
-- Stytch Connected Apps handles OAuth 2.1 discovery, Dynamic Client Registration, PKCE,
-  browser login, consent, and token issuance.
-- The service validates every access token's signature, issuer, audience, expiry, and `openid`
-  scope against Stytch's rotating JWKS.
-- SQLite rows are keyed by the token's `sub`, so each Stytch user sees only their own notes.
-- Access is capped at 30 minutes by the server, even if a Stytch client is accidentally configured
-  with a longer access-token lifetime.
-- The Claude Code plugin runs a pinned `mcp-remote` bridge, which performs OAuth and connects Claude
-  Code to the remote MCP endpoint.
-
-## Architecture
+Horizon owns the public deployment boundary: GitHub builds, TLS, OAuth, access control, scaling,
+preview environments, and request observability. The repository only owns the MCP tools and their
+application data.
 
 ```text
-Claude Code plugin -> http(s)://MCP/mcp -> validate Stytch JWT -> per-user SQLite CRUD
-         |                                      ^
-         +-> Stytch discovery -> browser login/consent app -> Stytch token endpoint
+MCP client -> Horizon OAuth gateway -> FastMCP server -> SQLite
 ```
 
-The browser app is necessary. Stytch hosts discovery, registration, and token endpoints, while your
-application hosts the `IdentityProvider` component used for login and consent.
+The five tools create, list, read, update, and delete notes in one shared workspace. Horizon decides
+who can reach that workspace. The server deliberately does not trust undocumented identity headers
+or pretend that gateway users map to application-level note owners.
 
-## 1. Configure Stytch
+## Deploy on Horizon
 
-Create a **Consumer Authentication** project, then configure:
+1. Push this repository to GitHub.
+2. Sign in at [horizon.prefect.io](https://horizon.prefect.io) and connect the GitHub repository.
+3. Create a server with these values:
 
-1. In **Frontend SDK**, enable the SDK and authorize `http://localhost:3000`.
-2. In **Redirect URLs**, add `http://localhost:3000/authenticate` for both login and signup.
-3. Enable **Email Magic Links** with Login or Create.
-4. In **Connected Apps**, set the Authorization URL to
-   `http://localhost:3000/oauth/authorize`.
-5. Enable **Dynamic Client Registration**. The MCP client uses DCR because its callback port can
-   vary.
-6. Set the Connected Apps access-token expiry to **30 minutes** where Stytch permits it.
+   - Server name: `horizon-notes` or another available name
+   - Entrypoint: `server.py:mcp`
+   - Authentication: enabled
+   - Environment variable: `FASTMCP_STATELESS_HTTP=true`
 
-The service and plugin request only `openid`, because the MCP server needs only the stable `sub`
-identifier. It does not need profile or email data.
+4. Deploy the server. Horizon detects `pyproject.toml`, installs the Python dependencies,
+   and publishes an endpoint such as `https://horizon-notes.fastmcp.app/mcp`.
+5. Test every tool in Horizon Inspector or ChatMCP before connecting another client.
 
-The server rejects every access token 30 minutes after that token's `iat`. The plugin uses the
-pinned `mcp-remote@0.2.1` bridge, which requests the scopes advertised by the MCP protected resource
-without adding `offline_access`. Stytch therefore does not issue a refresh token, and expiration
-returns the user to interactive authorization.
+Every push to the configured production branch triggers a deployment. Pull requests receive preview
+deployments, so this branch can be pushed and opened as a PR before it is merged.
 
-This bridge is intentional. Native Claude Code OAuth automatically adds `offline_access` when the
-authorization server advertises it, allowing silent token refresh and defeating the forced-login
-requirement.
+## Connect a client
 
-Copy `.env.example` to `.env` and set:
-
-- `STYTCH_PROJECT_ID`: the `project-test-...` project ID, used as JWT audience.
-- `STYTCH_DOMAIN`: the full project domain shown by Stytch, such as
-  `https://...customers.stytch.dev`, used as issuer and JWKS host. Do not use the API secret or
-  public token here.
-- `STYTCH_PUBLIC_TOKEN`: the browser-safe `public-token-test-...` value used by the login and
-  consent UI.
-- `MCP_BASE_URL`: externally visible origin of the MCP server, without `/mcp`.
-
-No Stytch secret key belongs in this project. JWT verification only needs public signing keys.
-
-After saving the dashboard configuration, verify Stytch discovery and signing keys:
+Use the connection snippet produced by Horizon. For the included Claude Code plugin:
 
 ```bash
-set -a; source .env; set +a
-uv run python scripts/check_stytch.py
-```
-
-Do not continue to the browser login test until this prints
-`PASS: Stytch authorization metadata and JWKS are ready for MCP OAuth.`
-
-## 2. Run locally
-
-```bash
-uv sync
-set -a; source .env; set +a
-uv run mcp-auth
-```
-
-In another terminal:
-
-```bash
-cd web
-npm install
-npm run dev
-```
-
-For a true OAuth test, both the MCP endpoint and authorization page should normally be reachable at
-stable HTTPS URLs. A development tunnel can publish ports 8000 and 3000. Update `MCP_BASE_URL`, the
-Stytch Frontend SDK authorized environment and redirect URL, the Connected Apps Authorization URL,
-and `SQLITE_NOTES_MCP_URL` to those HTTPS URLs. The plain localhost setup is useful while building,
-but production must use HTTPS.
-
-## 3. Install and authenticate the Claude Code plugin
-
-From the repository root, register the local marketplace and install the plugin for this project:
-
-```bash
+export SQLITE_NOTES_MCP_URL=https://your-server-name.fastmcp.app/mcp
 claude plugin marketplace add "$PWD" --scope project
 claude plugin install sqlite-notes@mcp-auth-local --scope project
 ```
 
-The local server URL defaults to `http://127.0.0.1:8000/mcp`. For a hosted or tunneled server, set
-the URL before starting Claude Code:
+Open `/mcp`, choose `sqlite-notes`, and complete the Horizon sign-in flow.
+
+## Run locally
+
+Local HTTP mode intentionally has no authentication. It is for development on loopback only.
 
 ```bash
-export SQLITE_NOTES_MCP_URL=https://your-mcp-tunnel.example/mcp
+uv sync
+uv run horizon-notes
 ```
 
-Then run `/reload-plugins`, open `/mcp`, and select `sqlite-notes`. The pinned `mcp-remote` bridge
-discovers the Stytch authorization server through the MCP server, registers itself, opens the
-browser, uses PKCE, and returns with an access token.
+The MCP endpoint is `http://127.0.0.1:8000/mcp`. Optional environment variables are documented in
+`.env.example`.
 
-Try prompts such as:
+Verify the exact object Horizon imports:
 
-- "Create a note titled Grocery list with body coffee and oranges."
-- "List my notes."
-- "Update note 1 to add milk."
-- "Delete note 1."
+```bash
+uv run fastmcp inspect server.py:mcp
+```
 
-After 30 minutes the MCP server rejects the current access token. Because the bridge does not
-request `offline_access`, it cannot silently refresh and must repeat interactive authorization.
-
-## Tests
+## Test
 
 ```bash
 uv run pytest
-cd web && npm run build
 ```
 
-The automated tests cover CRUD and cross-user isolation plus the 30-minute access-token boundary.
-A complete login cannot be automated without a configured Stytch project and an email inbox, so the
-browser flow is an explicit manual end-to-end check.
+## Persistence boundary
 
-## Production notes
+SQLite keeps this demo easy to understand, but the default `/tmp/horizon-notes/notes.db` file is
+ephemeral on a scale-to-zero deployment and is not shared by multiple instances. Do not use it for
+durable production data. Before relying on stored notes, replace `NotesDatabase` with a managed,
+network-accessible database and add migrations, backups, connection pooling, and application-level
+tenant authorization.
 
-SQLite and a single process are intentional for this exercise. For a paid multi-instance service,
-use a managed database, migrations, backups, HTTPS, structured audit logs, rate limits, and explicit
-authorization scopes. Keep the same boundary: Stytch authenticates the user, while your database and
-service decide which rows and actions that user may access.
+Horizon authentication protects the MCP endpoint. It does not by itself make rows private to each
+user, so this server correctly describes the notes as shared.
