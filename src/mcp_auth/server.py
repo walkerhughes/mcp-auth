@@ -3,11 +3,15 @@ from __future__ import annotations
 from fastmcp import FastMCP
 
 from .config import Settings
-from .database import NotesDatabase
+from .database import NotesDatabase, PostgresNotesDatabase
 
 
 def create_server(settings: Settings) -> FastMCP:
-    database = NotesDatabase(settings.database_path)
+    database = (
+        PostgresNotesDatabase(settings.database_url)
+        if settings.database_url
+        else NotesDatabase(settings.database_path)
+    )
     database.initialize()
 
     mcp = FastMCP(

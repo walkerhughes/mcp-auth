@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "sqlite-notes",
-      "description": "Shared SQLite notes protected by Prefect Horizon",
+      "description": "Shared Supabase notes protected by Prefect Horizon",
       "source": "./plugin/sqlite-notes",
       "category": "development"
     }

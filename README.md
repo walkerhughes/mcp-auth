@@ -1,13 +1,14 @@
 # Horizon Notes MCP
 
-A small FastMCP notes server prepared for deployment on [Prefect Horizon](https://www.prefect.io/horizon/deploy).
+A small FastMCP notes server prepared for deployment on [Prefect Horizon](https://www.prefect.io/horizon/deploy),
+with a production Supabase Postgres database managed by Pulumi.
 
 Horizon owns the public deployment boundary: GitHub builds, TLS, OAuth, access control, scaling,
 preview environments, and request observability. The repository only owns the MCP tools and their
 application data.
 
 ```text
-MCP client -> Horizon OAuth gateway -> FastMCP server -> SQLite
+MCP client -> Horizon OAuth gateway -> FastMCP server -> Supabase Postgres
 ```
 
 The five tools create, list, read, update, and delete notes in one shared workspace. Horizon decides
@@ -25,9 +26,11 @@ or pretend that gateway users map to application-level note owners.
    - Authentication: enabled
    - Environment variable: `FASTMCP_STATELESS_HTTP=true`
 
-4. Deploy the server. Horizon detects `pyproject.toml`, installs the Python dependencies,
+4. Provision Supabase by following [`infra/README.md`](infra/README.md), then add the secret Pulumi
+   `databaseUrl` output to Horizon as `DATABASE_URL`.
+5. Deploy the server. Horizon detects `pyproject.toml`, installs the Python dependencies,
    and publishes an endpoint such as `https://horizon-notes.fastmcp.app/mcp`.
-5. Test every tool in Horizon Inspector or ChatMCP before connecting another client.
+6. Test every tool in Horizon Inspector or ChatMCP before connecting another client.
 
 Every push to the configured production branch triggers a deployment. Pull requests receive preview
 deployments, so this branch can be pushed and opened as a PR before it is merged.
@@ -53,8 +56,8 @@ uv sync
 uv run horizon-notes
 ```
 
-The MCP endpoint is `http://127.0.0.1:8000/mcp`. Optional environment variables are documented in
-`.env.example`.
+The MCP endpoint is `http://127.0.0.1:8000/mcp`. Without `DATABASE_URL`, local development falls
+back to SQLite at `MCP_DATABASE_PATH`. Optional variables are documented in `.env.example`.
 
 Verify the exact object Horizon imports:
 
@@ -68,13 +71,22 @@ uv run fastmcp inspect server.py:mcp
 uv run pytest
 ```
 
-## Persistence boundary
+## Environment variables
 
-SQLite keeps this demo easy to understand, but the default `/tmp/horizon-notes/notes.db` file is
-ephemeral on a scale-to-zero deployment and is not shared by multiple instances. Do not use it for
-durable production data. Before relying on stored notes, replace `NotesDatabase` with a managed,
-network-accessible database and add migrations, backups, connection pooling, and application-level
-tenant authorization.
+- `DATABASE_URL`: secret Supabase transaction-pooler URL used by the deployed MCP.
+- `FASTMCP_STATELESS_HTTP=true`: enables stateless HTTP for Horizon autoscaling.
+- `MCP_DATABASE_PATH`: optional SQLite path for local development only.
+- `MCP_HOST` and `MCP_PORT`: optional local server bind settings.
+
+Pulumi itself uses `SUPABASE_ACCESS_TOKEN` and usually `PULUMI_ACCESS_TOKEN`; neither belongs in
+Horizon. `SUPABASE_URL`, anon keys, and service-role keys are not needed because the service uses a
+direct Postgres connection.
+
+## Data boundary
+
+Production notes live in the private `horizon_notes` Postgres schema, outside Supabase's default
+Data API schemas. The MCP creates the schema and table idempotently at startup. Local SQLite remains
+available only as a zero-configuration development fallback.
 
 Horizon authentication protects the MCP endpoint. It does not by itself make rows private to each
 user, so this server correctly describes the notes as shared.

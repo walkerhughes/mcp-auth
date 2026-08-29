@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from mcp_auth.database import NotesDatabase
+from mcp_auth.database import NotesDatabase, PostgresNotesDatabase
 
 
 @pytest.fixture
@@ -59,3 +59,22 @@ def test_initialize_migrates_the_previous_stytch_schema(tmp_path: Path) -> None:
     with sqlite3.connect(path) as connection:
         columns = connection.execute("PRAGMA table_info(notes)").fetchall()
     assert "owner_id" not in {column[1] for column in columns}
+
+
+def test_postgres_connection_disables_prepared_statements(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    sentinel = object()
+
+    def fake_connect(database_url: str, **kwargs: object) -> object:
+        captured["database_url"] = database_url
+        captured.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr("mcp_auth.database.psycopg.connect", fake_connect)
+
+    database = PostgresNotesDatabase("postgresql://example")
+
+    assert database._connect() is sentinel
+    assert captured["database_url"] == "postgresql://example"
+    assert captured["connect_timeout"] == 10
+    assert captured["prepare_threshold"] is None

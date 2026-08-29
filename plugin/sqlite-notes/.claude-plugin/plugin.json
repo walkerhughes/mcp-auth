@@ -1,7 +1,7 @@
 {
   "name": "sqlite-notes",
   "version": "0.1.0",
-  "description": "Shared SQLite notes protected by Prefect Horizon",
+  "description": "Shared Supabase notes protected by Prefect Horizon",
   "author": {
     "name": "Walker Hughes"
   }

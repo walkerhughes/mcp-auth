@@ -1,0 +1,14 @@
+name: horizon-notes-infra
+description: Production Supabase database for the Horizon Notes MCP
+runtime:
+  name: python
+  options:
+    toolchain: pip
+    virtualenv: .pulumi-venv
+packages:
+  supabase:
+    source: terraform-provider
+    version: 1.4.0
+    parameters:
+      - supabase/supabase
+      - 1.10.1
