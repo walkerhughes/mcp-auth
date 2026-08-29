@@ -1,5 +1,7 @@
 name: horizon-notes-infra
 description: Production Supabase database for the Horizon Notes MCP
+backend:
+  url: file://.
 runtime:
   name: python
   options:

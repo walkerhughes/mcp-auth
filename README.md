@@ -78,9 +78,10 @@ uv run pytest
 - `MCP_DATABASE_PATH`: optional SQLite path for local development only.
 - `MCP_HOST` and `MCP_PORT`: optional local server bind settings.
 
-Pulumi itself uses `SUPABASE_ACCESS_TOKEN` and usually `PULUMI_ACCESS_TOKEN`; neither belongs in
-Horizon. `SUPABASE_URL`, anon keys, and service-role keys are not needed because the service uses a
-direct Postgres connection.
+Pulumi uses `SUPABASE_ACCESS_TOKEN` to provision the database. The infrastructure project uses an
+ignored local filesystem state backend, so it does not require a Pulumi account, Pulumi Cloud, or
+`PULUMI_ACCESS_TOKEN`. None of the provisioning credentials belong in Horizon. `SUPABASE_URL`, anon
+keys, and service-role keys are not needed because the service uses a direct Postgres connection.
 
 ## Data boundary
 

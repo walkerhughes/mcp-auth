@@ -28,3 +28,4 @@ web/vite.config.d.ts
 infra/sdks/
 infra/venv/
 infra/.pulumi-venv/
+infra/.pulumi/
