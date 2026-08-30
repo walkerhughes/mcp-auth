@@ -1,0 +1,5 @@
+config:
+  horizon-notes-infra:supabaseOrganizationId: your-supabase-organization-slug
+  horizon-notes-infra:projectName: horizon-notes-prod
+  horizon-notes-infra:region: us-west-1
+  horizon-notes-infra:instanceSize: micro

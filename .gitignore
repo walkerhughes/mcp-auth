@@ -23,3 +23,9 @@ web/dist/
 web/*.tsbuildinfo
 web/vite.config.js
 web/vite.config.d.ts
+
+# Pulumi-generated local SDK and virtual environment
+infra/sdks/
+infra/venv/
+infra/.pulumi-venv/
+infra/.pulumi/
